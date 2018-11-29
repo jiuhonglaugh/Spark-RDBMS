@@ -31,7 +31,7 @@ class HbaseUtil(tableName: String, tmpPath: String) {
   private val hfilePath = new Path(tmpPath)
   private val table = new HTable(conf, tableName)
 
-  val job = Job.getInstance(conf)
+  private val job = Job.getInstance(conf)
   job.setMapOutputKeyClass(classOf[ImmutableBytesWritable])
   job.setMapOutputValueClass(classOf[KeyValue])
 
@@ -66,14 +66,18 @@ object HbaseUtil {
 
   /**
     * 将DataFrame 转换为Hfile格式的数据
-    * @param df             数据集
-    * @param rddSchema      数据类型
-    * @param rowKeyOffset   rowkey在数据集中所在的位置 rowKey不会产生字段数据
-    * @param clo            列族
+    *
+    * @param df           数据集
+    * @param rddSchema    数据类型
+    * @param rowKeyOffset rowkey在数据集中所在的位置 rowKey不会产生字段数据
+    * @param clo          字段和列族的映射，字段为key，列族为value
     * @return
     */
 
-  def hfileKV(df: DataFrame, rddSchema: StructType, rowKeyOffset: Int, clo: String = "cf"): RDD[(ImmutableBytesWritable, KeyValue)] = {
+  def hfileKV(df: DataFrame,
+              rddSchema: StructType,
+              rowKeyOffset: Int,
+              cloMap: HashMap[String, String]): RDD[(ImmutableBytesWritable, KeyValue)] = {
 
     LOGGER.info("开始执行 flatMap 操作 将 DataFrame 转换为 Hfile 格式的数据")
 
@@ -87,25 +91,26 @@ object HbaseUtil {
         if (rowKeyOffset == i) {
           i = i + 1
         }
+        val field = rddSchema.fields(i).name
         if (!row.isNullAt(i)) {
           rddSchema.fields(i).dataType match {
-            case IntegerType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getInt(i).toString)
-            case LongType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getLong(i).toString)
-            case DoubleType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getDouble(i).toString)
-            case FloatType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getFloat(i).toString)
-            case ShortType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getShort(i).toString)
-            case ByteType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getByte(i).toString)
-            case BooleanType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getBoolean(i).toString)
-            case StringType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getString(i))
-            case BinaryType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getAs[Array[Byte]](i).toString)
-            case TimestampType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getAs[Timestamp](i).toString)
-            case DateType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getAs[Date](i).toString)
-            case t: DecimalType => kvs = kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, row.getDecimal(i).toString)
+            case IntegerType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getInt(i).toString)
+            case LongType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getLong(i).toString)
+            case DoubleType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getDouble(i).toString)
+            case FloatType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getFloat(i).toString)
+            case ShortType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getShort(i).toString)
+            case ByteType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getByte(i).toString)
+            case BooleanType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getBoolean(i).toString)
+            case StringType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getString(i))
+            case BinaryType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getAs[Array[Byte]](i).toString)
+            case TimestampType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getAs[Timestamp](i).toString)
+            case DateType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getAs[Date](i).toString)
+            case t: DecimalType => kvs = kvs :+ getKV(rowKey, cloMap.get(field), field, row.getDecimal(i).toString)
             case _ => throw new IllegalArgumentException(
               s"Can't translate non-null value for field $i")
           }
         } else {
-          kvs :+ getKV(rowKey, clo, rddSchema.fields(i).name, "\\n")
+          kvs :+ getKV(rowKey, cloMap.get(field), field, "\\n")
         }
         i = i + 1
       }
@@ -146,7 +151,7 @@ object HbaseUtil {
   def getHbaseRDD(sc: SparkContext,
                   tableName: String,
                   snapshotPath: String,
-                  snapshotName:String,
+                  snapshotName: String,
                   fields: List[String],
                   clo: String = "cf"): RDD[(ImmutableBytesWritable, Result)] = {
     val max_versions = 3
@@ -168,5 +173,5 @@ object HbaseUtil {
     val proto = ProtobufUtil.toScan(scan)
     Base64.encodeBytes(proto.toByteArray)
   }
-
 }
+
