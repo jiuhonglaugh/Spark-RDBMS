@@ -1,4 +1,4 @@
-package com.bessky.util.db
+package com.my.utils.db
 
 import java.sql.{Date, Timestamp}
 import org.apache.commons.codec.digest.DigestUtils
