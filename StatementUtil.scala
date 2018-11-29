@@ -1,4 +1,4 @@
-package com.bessky.util.db
+package com.my.utils.db
 
 import java.sql.{Connection, PreparedStatement}
 import org.apache.spark.sql.DataFrame
@@ -80,13 +80,24 @@ object StatementUtil {
     val sb = new StringBuilder()
     rddSchema.fields foreach { field => {
       val name = field.name
-      val typ: String = field.dataType.toString
+      val typ: String = getType(field.dataType.typeName)
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
     }}
     if (sb.length < 2) {
     }
-    val sql = s"CREATE TABLE $table ($sb.substring(2))"
+    val sql = s"CREATE TABLE $table (${sb.substring(2)})"
     conn.prepareStatement(sql)
+  }
+
+  def getType(fileType: String):String={
+    fileType match {
+      case "string"=> "varchar(255)"
+      case "long" => "BigInt(20)"
+      case "double" => "float(10,2)"
+      case "integer" => "int(10)"
+      case "timestamp" => "datetime"
+      case _ => ""
+    }
   }
 }
