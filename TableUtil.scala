@@ -1,4 +1,4 @@
-package com.bessky.util.db
+package com.my.utils.db
 
 import java.sql.Connection
 import org.apache.spark.sql.types.StructType
@@ -14,7 +14,7 @@ object TableUtil {
     Try {
       val statement = StatementUtil.createTable(rddSchema,conn, table)
       try {
-        statement.executeQuery()
+       statement.execute()
       } finally {
         statement.close()
       }
