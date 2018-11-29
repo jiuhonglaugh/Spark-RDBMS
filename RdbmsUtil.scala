@@ -1,9 +1,7 @@
-package com.bessky.util.db
+package com.my.utils.db
 
 import java.sql.{Connection, PreparedStatement, SQLException}
 import java.util.Properties
-
-import com.bessky.SaveMode
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types._
@@ -16,49 +14,9 @@ import scala.util.control.NonFatal
   * @create: 2018-11-25 13:18
   *
   **/
-class RdbmsUtil(mode:SaveMode,create:Boolean = false) {
 
+object RdbmsUtil extends Serializable {
   private val LOGGER = LoggerFactory.getLogger("RdbmsUtil")
-
-  /**
-    * 在这里对表做创建、删除、清空、等操作
-    *
-    * @param df         数据集
-    * @param url        数据库url
-    * @param table      表名
-    * @param properties 数据库连接属性
-    */
-  def saveTable(df: DataFrame,
-                url: String,
-                table: String,
-                props: Properties): Unit = {
-    val conn = JdbcUtils.createConnectionFactory(url, props)()
-    try {
-      var tableExists = TableUtil.tableExists(conn, table)
-
-      if(!tableExists && !create){
-        throw new SQLException(s"$table Table does not exist")
-      }
-
-      if (mode == SaveMode.Overwrite) {
-        val sql = TableUtil.truncateTable(conn, table)
-      }
-
-      if (!tableExists && create) {
-        if(!TableUtil.createTable(df.schema,conn,table)){
-          throw new SQLException(s"$table Table Creation Failed")
-        }
-      }
-    } finally {
-      conn.close()
-    }
-
-    val rddSchema = df.schema
-    val getConnection: () => Connection = JdbcUtils.createConnectionFactory(url, props)
-    df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, mode, 1000)
-    }
-  }
 
   def savePartition(getConnection: () => Connection,
                     table: String,
@@ -147,4 +105,89 @@ class RdbmsUtil(mode:SaveMode,create:Boolean = false) {
       }
     }
   }
+}
+
+class RdbmsUtil(mode: SaveMode, authCreateTable: Boolean = false) extends Serializable {
+  private val PROP = new Properties()
+  val PROP_URL = "url"
+  val PROP_USER = "user"
+  val PROP_PWD = "password"
+  val PROP_USESSL = "useSSL"
+  val PROP_REWRITEBATCHEDSTATEMENTS = "rewriteBatchedStatements"
+  val PROP_SERVERTIMEZONE = "serverTimezone"
+  private var INITIALIZATION = false
+
+  /**
+    * 给任务参数设置默认值
+    * 用户如果有设置新的参数则覆盖默认参数
+    * 此方法必须执行，不执行将会抛出异常
+    *
+    * @param args
+    */
+  def init(args: Array[String]): Unit = {
+
+    PROP.setProperty(PROP_URL, "jdbc:mysql://192.168.99.236:3306/data?characterEncoding=UTF-8")
+    PROP.setProperty(PROP_REWRITEBATCHEDSTATEMENTS, "true")
+    PROP.setProperty(PROP_USER, "test")
+    PROP.setProperty(PROP_PWD, "yjy2018")
+    PROP.setProperty(PROP_USESSL, "false");
+    PROP.setProperty(PROP_SERVERTIMEZONE, "CST")
+    args.foreach(line => {
+      val pair = line.split("=")
+      if (pair != null && pair.length == 2) {
+        val key = pair(0).trim
+        val value = pair(1).trim
+        PROP.setProperty(key, value)
+      }
+    })
+    INITIALIZATION = true
+  }
+
+  def getProp(): Properties = {
+    if (!INITIALIZATION) {
+      throw new RuntimeException("Initialization method not executed")
+    }
+    this.PROP
+  }
+
+  /**
+    * 在这里对表做创建、删除、清空、等操作
+    *
+    * @param df         数据集
+    * @param url        数据库url
+    * @param table      表名
+    * @param properties 数据库连接属性
+    */
+  def saveTable(df: DataFrame,
+                url: String,
+                table: String,
+                props: Properties): Unit = {
+    val conn = JdbcUtils.createConnectionFactory(url, props)()
+    try {
+      var tableExists = TableUtil.tableExists(conn, table)
+
+      if (!tableExists && !authCreateTable) {
+        throw new SQLException(s"$table Table does not exist")
+      }
+
+      if (mode == SaveMode.Overwrite) {
+        val sql = TableUtil.truncateTable(conn, table)
+      }
+
+      if (!tableExists && authCreateTable) {
+        if (!TableUtil.createTable(df.schema, conn, table)) {
+          throw new SQLException(s"$table Table Create Failed")
+        }
+      }
+    } finally {
+      conn.close()
+    }
+
+    val rddSchema = df.schema
+    val getConnection: () => Connection = JdbcUtils.createConnectionFactory(url, props)
+    df.foreachPartition { iterator =>
+      RdbmsUtil.savePartition(getConnection, table, iterator, rddSchema, mode, 1000)
+    }
+  }
+
 }
