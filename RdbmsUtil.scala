@@ -126,10 +126,10 @@ class RdbmsUtil(mode: SaveMode, authCreateTable: Boolean = false) extends Serial
     */
   def init(args: Array[String]): Unit = {
 
-    PROP.setProperty(PROP_URL, "jdbc:mysql://192.168.99.236:3306/data?characterEncoding=UTF-8")
+    PROP.setProperty(PROP_URL, "jdbc:mysql://0.0.0.0:3306/data?characterEncoding=UTF-8")
     PROP.setProperty(PROP_REWRITEBATCHEDSTATEMENTS, "true")
     PROP.setProperty(PROP_USER, "test")
-    PROP.setProperty(PROP_PWD, "yjy2018")
+    PROP.setProperty(PROP_PWD, "test")
     PROP.setProperty(PROP_USESSL, "false");
     PROP.setProperty(PROP_SERVERTIMEZONE, "CST")
     args.foreach(line => {
