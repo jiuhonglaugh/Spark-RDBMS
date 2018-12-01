@@ -20,8 +20,13 @@ import org.slf4j.LoggerFactory
 /**
   * @author: Mr.Zhu
   * @create: 2018-11-28 20:13
+  * 
+  * 封装了 spark 将生成的 hfile 写到 hdfs 后
+  * 调用 hbase API 将 spark 写入 hdfs 中的 hfile 加载到 hbase 的过程
   *
-  **/
+  * @param tableName Hbase 中的表名
+  * @param tmpPath   hdfs 临时存储 Hfile的文件夹 存在将被删掉
+  */
 class HbaseUtil(tableName: String, tmpPath: String) {
 
   private val LOGGER = LoggerFactory.getLogger(HbaseUtil.getClass)
@@ -142,7 +147,7 @@ object HbaseUtil {
     *
     * @param sc           SparkContext
     * @param tableName    hbase表名
-    * @param clo          需要读取的列族
+    * @param cloMap       需要读取的字段和列族的映射
     * @param fields       需要读取的字段
     * @param snapshotName hbase 数据库快照名称（创建快照方式 hbase>snapshot 'tableName','snapshotName'）
     * @param snapshotPath 快照路径，不存在将创建，用户需要有权限
@@ -153,15 +158,19 @@ object HbaseUtil {
                   snapshotPath: String,
                   snapshotName: String,
                   fields: List[String],
-                  clo: String = "cf"): RDD[(ImmutableBytesWritable, Result)] = {
+                  cloMap: util.HashMap[String, String]): RDD[(ImmutableBytesWritable, Result)] = {
     val max_versions = 3
     val conf = HBaseConfiguration.create
     conf.set(TableInputFormat.INPUT_TABLE, tableName);
     val scan = new Scan
-    scan.addFamily(Bytes.toBytes(clo))
-    fields.foreach(filed => {
+    val cloSet = Set[String]()
+    
+    fields.foreach(filed =>{
+      val clo  = cloMap.get(filed)
       scan.addColumn(Bytes.toBytes(clo), Bytes.toBytes(filed))
+      cloSet.add(clo)
     })
+    cloSet.toList.foreach(clo =>scan.addFamily(Bytes.toBytes(clo)))
     scan.setMaxVersions(max_versions)
     conf.set(TableInputFormat.SCAN, convertScanToString(scan))
     val job = Job.getInstance(conf)
